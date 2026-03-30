@@ -9,88 +9,93 @@ if getgenv().emergency_stop == nil then
     getgenv().emergency_stop = false
 end
 
--- Convert studs to power (multiplier)
+-- Helper: Convert studs to power
 local function StudsIntoPower(studs)
     return studs * 6
 end
 
--- Get the closest target (lock-on)
+-- Get the closest target
 function lolz:GetClosestTarget()
     local closestPlayer = nil
     local shortestDistance = math.huge
     local myHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
     if not myHRP then return nil end
-    
+
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
             local targetHRP = player.Character.HumanoidRootPart
-            local distance = (targetHRP.Position - myHRP.Position).magnitude
-            if distance < shortestDistance then
-                shortestDistance = distance
+            local dist = (targetHRP.Position - myHRP.Position).magnitude
+            if dist < shortestDistance then
+                shortestDistance = dist
                 closestPlayer = player
             end
         end
     end
+    print("Locked onto:", closestPlayer and closestPlayer.Name or "None")
     return closestPlayer
 end
 
--- Extend hitbox behind target with continuous tracking
+-- The main function to extend behind target
 function lolz:ExtendHitboxBehindTarget(studs, duration)
     local targetPlayer = self:GetClosestTarget()
-    if not targetPlayer or not targetPlayer.Character or not targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
-        print("No valid target found.")
+    if not targetPlayer then
+        print("No target found.")
+        return
+    end
+    local targetHRP = targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not targetHRP then
+        print("Target HRP not found.")
         return
     end
 
-    local targetHRP = targetPlayer.Character.HumanoidRootPart
     local character = LocalPlayer.Character
     local humanoid = character:FindFirstChildOfClass("Humanoid")
     local hrp = character:FindFirstChild("HumanoidRootPart")
-    if not humanoid or not hrp then return end
+    if not humanoid or not hrp then
+        print("Player HRP or Humanoid not found.")
+        return
+    end
 
-    -- Save original WalkSpeed
+    -- Save original speed and stop movement
     local originalSpeed = humanoid.WalkSpeed
-    -- Stop movement
     humanoid.WalkSpeed = 0
 
-    -- Calculate total extension distance
     local distance = StudsIntoPower(studs)
 
     local startTime = tick()
     local endTime = startTime + duration
 
-    -- Loop for continuous target tracking
+    print("Extension started. Moving behind target...")
+
+    -- Loop for continuous tracking
     while tick() < endTime and not getgenv().emergency_stop do
-        -- Recalculate behind position based on current target position and look vector
+        -- Recalculate behind position
         local lookVector = targetHRP.CFrame.LookVector
         local behindPosition = targetHRP.CFrame.Position - (lookVector * 5)
 
-        -- Calculate direction towards behind position
+        -- Direction towards behind position
         local direction = (behindPosition - hrp.Position).unit
         local moveSpeed = distance / duration
 
-        -- Set velocity towards behind position
+        -- Set velocity toward behind position
         hrp.Velocity = direction * moveSpeed
 
         RunService.Heartbeat:Wait()
     end
 
-    -- Stop movement after extension
-    hrp.Velocity = Vector3.new(0, 0, 0)
-    -- Restore original WalkSpeed
+    -- Stop movement
+    hrp.Velocity = Vector3.new(0,0,0)
+    -- Restore speed
     humanoid.WalkSpeed = originalSpeed
+
+    print("Extension ended.")
 end
 
--- Stop extension
-function lolz:StopExtendingHitbox()
-    getgenv().emergency_stop = true
-end
-
--- Bind Q key to trigger the targeting and extension
+-- Bind Q key
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
     if input.KeyCode == Enum.KeyCode.Q then
-        -- Trigger the behind target extension
+        print("Q pressed, extending behind target.")
         lolz:ExtendHitboxBehindTarget(11.23, 0.56)
     end
 end)
