@@ -69,7 +69,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if input.KeyCode == Enum.KeyCode.Q then
         -- Example usage: extend hitbox by 10 studs for 1 second
         -- Adjust 'studs' and 'duration' as needed
-        lolz:ExtendHitbox(11.47, 0.53)
+        lolz:ExtendHitbox(11.48, 0.53)
     end
 end)
 
