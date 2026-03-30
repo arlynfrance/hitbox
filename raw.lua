@@ -1,77 +1,85 @@
+Here's a simplified version that only activates the hitbox extension when you press and hold the Q key. It will stop extending when you release Q, keeping the hitbox normal otherwise:
+
+```lua
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
 local lolz = {}
-local extensionActive = false
 local extensionConnection = nil
+local isExtending = false
 
 -- Convert studs to power multiplier
 local function StudsIntoPower(studs)
     return studs * 6
 end
 
--- Extend hitbox while Q is held down
-function lolz:ExtendHitbox(studs, duration)
-    if extensionActive then return end -- Prevent multiple runs
-    extensionActive = true
-
-    local distance = StudsIntoPower(studs)
-    local startTime = tick()
-
+-- Extend hitbox while Q is held
+local function extendHitbox(studs)
     -- Wait for character and HumanoidRootPart
     while not (LocalPlayer.Character and LocalPlayer.Character.Parent and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")) do
         game:GetService("RunService").Heartbeat:Wait()
-        if getgenv().emergency_stop then break
     end
 
     local hrp = LocalPlayer.Character.HumanoidRootPart
     local originalVelocity = hrp.Velocity
+    local distance = StudsIntoPower(studs)
 
-    -- Create a connection for heartbeat updates
+    -- Create a connection to continuously update velocity
     extensionConnection = RunService.Heartbeat:Connect(function()
         if not hrp or not hrp.Parent then
             -- Character might have died
-            self:StopExtendingHitbox()
+            if extensionConnection then
+                extensionConnection:Disconnect()
+                extensionConnection = nil
+            end
             return
         end
-
-        -- Apply the velocity boost
         local lookVector = hrp.CFrame.LookVector
-        local newVelocity = originalVelocity + (lookVector * distance)
-        hrp.Velocity = newVelocity
+        hrp.Velocity = originalVelocity + (lookVector * distance)
     end)
-
-    -- Wait for the specified duration
-    repeat
-        game:GetService("RunService").Heartbeat:Wait()
-        if getgenv().emergency_stop then break
-    until tick() - startTime > duration or getgenv().emergency_stop
-
-    -- Reset velocity and cleanup
-    if hrp and hrp.Parent then
-        hrp.Velocity = originalVelocity
-    end
-    self:StopExtendingHitbox()
 end
 
-function lolz:StopExtendingHitbox()
-    getgenv().emergency_stop = false
+local function stopHitboxExtension()
     if extensionConnection then
         extensionConnection:Disconnect()
         extensionConnection = nil
     end
-    extensionActive = false
+    -- Reset velocity to normal
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        local hrp = LocalPlayer.Character.HumanoidRootPart
+        -- Reset to original velocity (if needed, else keep it as is)
+        -- Here, you might want to store the original velocity before extension
+        -- For simplicity, this resets to zero
+        hrp.Velocity = Vector3.new(0,0,0)
+    end
 end
 
--- Monitor key press and release
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
     if input.KeyCode == Enum.KeyCode.Q then
-        -- Start extending hitbox when Q is pressed
-        lolz:ExtendHitbox(10, 0.5) -- Example: extend 10 studs for 0.5 seconds
+        -- Start extending hitbox (e.g., 10 studs)
+        isExtending = true
+        extendHitbox(10)
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode == Enum.KeyCode.Q then
+        -- Stop extending hitbox when Q is released
+        isExtending = false
+        stopHitboxExtension()
     end
 end)
 
 return lolz
+```
+
+### How it works:
+- When you press and hold Q, it starts extending the hitbox.
+- When you release Q, it stops extending and resets the velocity.
+- The hitbox extension only happens during the key hold.
+
+Let me know if you'd like me to trim it further or add more features!
