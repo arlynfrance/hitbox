@@ -1,6 +1,3 @@
-Here's a simplified version that only activates the hitbox extension when you press and hold the Q key. It will stop extending when you release Q, keeping the hitbox normal otherwise:
-
-```lua
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
@@ -75,11 +72,3 @@ UserInputService.InputEnded:Connect(function(input, gameProcessed)
 end)
 
 return lolz
-```
-
-### How it works:
-- When you press and hold Q, it starts extending the hitbox.
-- When you release Q, it stops extending and resets the velocity.
-- The hitbox extension only happens during the key hold.
-
-Let me know if you'd like me to trim it further or add more features!
