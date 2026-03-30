@@ -1,20 +1,21 @@
 local lolz = {}
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
--- Emergency stop flag
-if getgenv().emergency_stop == nil then
-    getgenv().emergency_stop = false
-end
+-- Configurable parameters
+local MAX_LOCK_DISTANCE = 14 -- maximum distance to lock
+local MOVE_DURATION = 0.5 -- seconds to lerp to position
+local STUDS = 10.23 -- extension distance
 
--- Helper: Convert studs to power
+-- Helper: convert studs to power
 local function StudsIntoPower(studs)
     return studs * 6
 end
 
--- Get the closest target
+-- Get closest target within range
 function lolz:GetClosestTarget()
     local closestPlayer = nil
     local shortestDistance = math.huge
@@ -25,78 +26,80 @@ function lolz:GetClosestTarget()
         if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
             local targetHRP = player.Character.HumanoidRootPart
             local dist = (targetHRP.Position - myHRP.Position).magnitude
-            if dist < shortestDistance then
+            if dist < shortestDistance and dist <= MAX_LOCK_DISTANCE then
                 shortestDistance = dist
                 closestPlayer = player
             end
         end
     end
-    print("Locked onto:", closestPlayer and closestPlayer.Name or "None")
+    if closestPlayer then
+        print("Locked onto:", closestPlayer.Name)
+    else
+        print("No target in range.")
+    end
     return closestPlayer
 end
 
--- The main function to extend behind target
-function lolz:ExtendHitboxBehindTarget(studs, duration)
-    local targetPlayer = self:GetClosestTarget()
-    if not targetPlayer then
-        print("No target found.")
+-- Move smoothly to target behind position with animation
+function lolz:MoveToBehindTarget(targetPlayer, studs, duration)
+    if not targetPlayer or not targetPlayer.Character or not targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        print("Invalid target.")
         return
     end
-    local targetHRP = targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart")
-    if not targetHRP then
-        print("Target HRP not found.")
-        return
-    end
-
+    local targetHRP = targetPlayer.Character.HumanoidRootPart
     local character = LocalPlayer.Character
     local humanoid = character:FindFirstChildOfClass("Humanoid")
     local hrp = character:FindFirstChild("HumanoidRootPart")
-    if not humanoid or not hrp then
-        print("Player HRP or Humanoid not found.")
+    if not humanoid or not hrp then return end
+
+    -- Play walk animation
+    local walkAnim = Instance.new("Animation")
+    walkAnim.AnimationId = "rbxassetid://2554305229" -- Example walk animation
+    local walkTrack = humanoid:LoadAnimation(walkAnim)
+    walkTrack:Play()
+
+    -- Calculate behind position
+    local lookVector = targetHRP.CFrame.LookVector
+    local behindPosition = targetHRP.CFrame.Position - (lookVector * 5)
+
+    -- Tween to behind position
+    local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Linear)
+    local tween = TweenService:Create(hrp, tweenInfo, {Position = behindPosition})
+    tween:Play()
+
+    -- Wait for tween to complete
+    tween.Completed:Wait()
+
+    -- Stop walking animation
+    walkTrack:Stop()
+    walkAnim:Destroy()
+end
+
+-- Main extension function
+function lolz:ExtendBehindTarget()
+    local targetPlayer = self:GetClosestTarget()
+    if not targetPlayer then return end
+    -- Lock only if within range
+    local targetHRP = targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart")
+    local myHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not targetHRP or not myHRP then return end
+
+    local dist = (targetHRP.Position - myHRP.Position).magnitude
+    if dist > MAX_LOCK_DISTANCE then
+        print("Target too far to lock.")
         return
     end
 
-    -- Save original speed and stop movement
-    local originalSpeed = humanoid.WalkSpeed
-    humanoid.WalkSpeed = 0
-
-    local distance = StudsIntoPower(studs)
-
-    local startTime = tick()
-    local endTime = startTime + duration
-
-    print("Extension started. Moving behind target...")
-
-    -- Loop for continuous tracking
-    while tick() < endTime and not getgenv().emergency_stop do
-        -- Recalculate behind position
-        local lookVector = targetHRP.CFrame.LookVector
-        local behindPosition = targetHRP.CFrame.Position - (lookVector * 5)
-
-        -- Direction towards behind position
-        local direction = (behindPosition - hrp.Position).unit
-        local moveSpeed = distance / duration
-
-        -- Set velocity toward behind position
-        hrp.Velocity = direction * moveSpeed
-
-        RunService.Heartbeat:Wait()
-    end
-
-    -- Stop movement
-    hrp.Velocity = Vector3.new(0,0,0)
-    -- Restore speed
-    humanoid.WalkSpeed = originalSpeed
-
-    print("Extension ended.")
+    -- Move to behind target with animation
+    self:MoveToBehindTarget(targetPlayer, STUDS, MOVE_DURATION)
 end
 
--- Bind Q key
+-- Bind Q to trigger the lock and move
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
     if input.KeyCode == Enum.KeyCode.Q then
-        print("Q pressed, extending behind target.")
-        lolz:ExtendHitboxBehindTarget(11.23, 0.56)
+        print("Q pressed. Locking on and moving behind target...")
+        lolz:ExtendBehindTarget()
     end
 end)
 
