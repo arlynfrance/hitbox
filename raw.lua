@@ -14,22 +14,27 @@ local function StudsIntoPower(studs)
     return studs * 6
 end
 
--- Extend hitbox
+-- Extend hitbox with stop/move logic
 function lolz:ExtendHitbox(studs, duration)
     local distance = StudsIntoPower(studs)
     local startTime = tick()
-
-    -- Stop any existing extension
-    if getgenv().emergency_stop then
-        getgenv().emergency_stop = false
-    end
 
     -- Wait until character and HumanoidRootPart exist
     while not (LocalPlayer.Character and LocalPlayer.Character.Parent and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")) do
         RunService.Heartbeat:Wait()
     end
 
-    local hrp = LocalPlayer.Character.HumanoidRootPart
+    local character = LocalPlayer.Character
+    local hrp = character:FindFirstChild("HumanoidRootPart")
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return end
+
+    -- Save original WalkSpeed
+    local originalSpeed = humanoid.WalkSpeed
+
+    -- Stop running
+    humanoid.WalkSpeed = 0
+
     local originalVelocity = hrp.Velocity
 
     repeat
@@ -45,14 +50,16 @@ function lolz:ExtendHitbox(studs, duration)
         local newVelocity = originalVelocity + (lookVector * distance)
         hrp.Velocity = newVelocity
 
-        -- Wait a frame
         RunService.RenderStepped:Wait()
     until tick() - startTime > duration or getgenv().emergency_stop
 
     -- Reset velocity
     hrp.Velocity = originalVelocity
 
-    -- Reset emergency stop flag
+    -- Restore WalkSpeed
+    humanoid.WalkSpeed = originalSpeed
+
+    -- Reset emergency stop flag if needed
     if getgenv().emergency_stop then
         getgenv().emergency_stop = false
     end
@@ -67,9 +74,8 @@ end
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
     if input.KeyCode == Enum.KeyCode.Q then
-        -- Example usage: extend hitbox by 10 studs for 1 second
-        -- Adjust 'studs' and 'duration' as needed
-        lolz:ExtendHitbox(11.48, 0.53)
+        -- Trigger extension with desired studs and duration
+        lolz:ExtendHitbox(11.23, 0.56)
     end
 end)
 
