@@ -1,146 +1,129 @@
--- Executable Script for Roblox Executors
--- Lock onto nearest target within range, move behind, face them, with UI slider control
-
-local Players = game:GetService("Players")
+local lolz = {}
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
+local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
+local Workspace = game:GetService("Workspace")
 
--- Create UI slider for distance control
-local function createUI()
-    local screenGui = Instance.new("ScreenGui")
-    screenGui.Name = "DistanceControlUI"
-    screenGui.Parent = game:GetService("StarterGui")
-    
-    local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(0, 200, 0, 50)
-    label.Position = UDim2.new(0, 10, 0, 10)
-    label.Text = "Distance: 11.23"
-    label.TextColor3 = Color3.new(1, 1, 1)
-    label.BackgroundColor3 = Color3.new(0, 0, 0)
-    label.Parent = screenGui
-    
-    local slider = Instance.new("Slider")
-    slider.Size = UDim2.new(0, 200, 0, 20)
-    slider.Position = UDim2.new(0, 10, 0, 70)
-    slider.Min = 1
-    slider.Max = 50
-    slider.Value = 11.23
-    slider.Parent = screenGui
-    
-    -- Update label as slider moves
-    slider:GetPropertyChangedSignal("Value"):Connect(function()
-        label.Text = ("Distance: %.2f"):format(slider.Value)
-    end)
-    return slider
-end
-
-local distanceSlider = createUI()
-
--- Parameters
-local MAX_LOCK_DISTANCE = 50 -- max lock distance
-local MOVE_DURATION = 0.5 -- seconds to move behind
-local EXTEND_STUDS = 11.23 -- default extension distance
+-- Configurable parameters
+local MAX_LOCK_DISTANCE = 14 -- maximum distance to lock
+local MOVE_DURATION = 0.5 -- seconds to lerp to position
+local STUDS = 10.21 -- extension distance
 
 -- Helper: convert studs to power
 local function StudsIntoPower(studs)
     return studs * 6
 end
 
--- Find closest target within range
-function GetClosestTarget()
-    local closest, minDist = nil, math.huge
+local function getKillersFolder()
+    local playersFolder = Workspace:FindFirstChild("Players")
+    if not playersFolder then return nil end
+    return playersFolder:FindFirstChild("Killers")
+end
+
+local function isValidKillerModel(model)
+    if not model then return false end
+    local hrp = model:FindFirstChild("HumanoidRootPart")
+    local humanoid = model:FindFirstChildWhichIsA("Humanoid")
+    return hrp and humanoid and humanoid.Health and humanoid.Health > 0
+end
+
+-- Get the closest killer within range
+function lolz:GetClosestKiller()
+    local killersFolder = getKillersFolder()
+    if not killersFolder then
+        print("No Killers folder found.")
+        return nil
+    end
+
+    local closestKiller = nil
+    local shortestDistance = math.huge
     local myHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
     if not myHRP then return nil end
-    for _, p in pairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-            local targetHRP = p.Character.HumanoidRootPart
-            local dist = (targetHRP.Position - myHRP.Position).magnitude
-            if dist < minDist and dist <= MAX_LOCK_DISTANCE then
-                minDist = dist
-                closest = p
+
+    for _, killer in pairs(killersFolder:GetChildren()) do
+        if isValidKillerModel(killer) then
+            local hrp = killer:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                local dist = (hrp.Position - myHRP.Position).magnitude
+                if dist < shortestDistance and dist <= MAX_LOCK_DISTANCE then
+                    shortestDistance = dist
+                    closestKiller = killer
+                end
             end
         end
     end
-    return closest
-end
 
--- Make your character face the back of the target
-local function faceBackOfTarget(targetHRP)
-    local myHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-    if myHRP and targetHRP then
-        local lookVector = targetHRP.CFrame.LookVector
-        local backPos = targetHRP.CFrame.Position - (lookVector * 2)
-        local direction = (backPos - myHRP.Position).unit
-        myHRP.CFrame = CFrame.new(myHRP.Position, myHRP.Position + direction)
+    if closestKiller then
+        print("Locked onto killer:", closestKiller.Name)
+    else
+        print("No valid killers in range.")
     end
+    return closestKiller
 end
 
--- Move behind target with animation and face them
-local function moveBehindTarget(targetPlayer, distance, duration)
-    local targetHRP = targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart")
+-- Move smoothly to target behind position with animation
+function lolz:MoveToBehindTarget(targetModel, studs, duration)
+    if not targetModel or not targetModel:FindFirstChild("HumanoidRootPart") then
+        print("Invalid target.")
+        return
+    end
+    local targetHRP = targetModel.HumanoidRootPart
     local character = LocalPlayer.Character
     local humanoid = character:FindFirstChildOfClass("Humanoid")
     local hrp = character:FindFirstChild("HumanoidRootPart")
-    if not targetHRP or not humanoid or not hrp then return end
+    if not humanoid or not hrp then return end
 
     -- Play walk animation
     local walkAnim = Instance.new("Animation")
-    walkAnim.AnimationId = "rbxassetid://2554305229" -- You can change this
+    walkAnim.AnimationId = "rbxassetid://2554305229" -- Example walk animation
     local walkTrack = humanoid:LoadAnimation(walkAnim)
     walkTrack:Play()
 
     -- Calculate behind position
     local lookVector = targetHRP.CFrame.LookVector
-    local behindPos = targetHRP.CFrame.Position - (lookVector * 5)
-
-    -- Face the back of the target
-    local backPos = targetHRP.CFrame.Position - (lookVector * 2)
-    local lookDir = (backPos - hrp.Position).unit
-    hrp.CFrame = CFrame.new(hrp.Position, hrp.Position + lookDir)
+    local behindPosition = targetHRP.CFrame.Position - (lookVector * 5)
 
     -- Tween to behind position
     local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Linear)
-    local tween = TweenService:Create(hrp, tweenInfo, {Position = behindPos})
+    local tween = TweenService:Create(hrp, tweenInfo, {Position = behindPosition})
     tween:Play()
+
+    -- Wait for tween to complete
     tween.Completed:Wait()
 
-    -- Stop animation
+    -- Stop walking animation
     walkTrack:Stop()
     walkAnim:Destroy()
 end
 
--- Main function: lock, face, move
-local function lockAndMove()
-    local targetPlayer = GetClosestTarget()
-    if not targetPlayer then
-        print("No target in range")
-        return
-    end
-    local targetHRP = targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart")
+-- Main extension function
+function lolz:ExtendBehindTarget()
+    local targetModel = self:GetClosestKiller()
+    if not targetModel then return end
+    -- Lock only if within range
+    local targetHRP = targetModel:FindFirstChild("HumanoidRootPart")
     local myHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
     if not targetHRP or not myHRP then return end
 
     local dist = (targetHRP.Position - myHRP.Position).magnitude
-    local currentDistance = distanceSlider and distanceSlider.Value or EXTEND_STUDS
-    if dist > currentDistance then
+    if dist > MAX_LOCK_DISTANCE then
         print("Target too far to lock.")
         return
     end
 
-    -- Move behind target with animation
-    moveBehindTarget(targetPlayer, currentDistance, MOVE_DURATION)
-
-    -- Face the back of target after movement
-    faceBackOfTarget(targetHRP)
+    -- Move to behind target with animation
+    self:MoveToBehindTarget(targetModel, STUDS, MOVE_DURATION)
 end
 
--- Bind Q key to trigger the action
+-- Bind Q to trigger the lock and move
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
     if input.KeyCode == Enum.KeyCode.Q then
-        print("Q pressed - locking and moving behind target")
-        lockAndMove()
+        print("Q pressed. Locking on and moving behind target...")
+        lolz:ExtendBehindTarget()
     end
 end)
+
+return lolz
