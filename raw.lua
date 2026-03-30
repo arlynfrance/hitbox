@@ -1,82 +1,75 @@
-local lolz = {}
-local UserInputService = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
-local Players = game:GetService("Players")
-local LocalPlayer = Players.LocalPlayer
+local TweenService = game:GetService("TweenService")
 
--- Emergency stop flag
-if getgenv().emergency_stop == nil then
-    getgenv().emergency_stop = false
+function lolz:GetClosestTarget()
+    local closestPlayer = nil
+    local shortestDistance = math.huge
+    local myHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not myHRP then return nil end
+    
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            local targetHRP = player.Character.HumanoidRootPart
+            local distance = (targetHRP.Position - myHRP.Position).magnitude
+            if distance < shortestDistance then
+                shortestDistance = distance
+                closestPlayer = player
+            end
+        end
+    end
+    return closestPlayer
 end
 
--- Convert studs to power (multiplier)
-local function StudsIntoPower(studs)
-    return studs * 6
-end
-
--- Extend hitbox with stop/move logic
-function lolz:ExtendHitbox(studs, duration)
-    local distance = StudsIntoPower(studs)
-    local startTime = tick()
-
-    -- Wait until character and HumanoidRootPart exist
-    while not (LocalPlayer.Character and LocalPlayer.Character.Parent and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")) do
-        RunService.Heartbeat:Wait()
+function lolz:ExtendBehindTargetLocked(studs, duration)
+    local targetPlayer = self:GetClosestTarget()
+    if not targetPlayer or not targetPlayer.Character or not targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        print("No target found.")
+        return
     end
 
+    local targetHRP = targetPlayer.Character.HumanoidRootPart
     local character = LocalPlayer.Character
-    local hrp = character:FindFirstChild("HumanoidRootPart")
     local humanoid = character:FindFirstChildOfClass("Humanoid")
-    if not humanoid then return end
+    local hrp = character:FindFirstChild("HumanoidRootPart")
+    if not humanoid or not hrp then return end
 
     -- Save original WalkSpeed
     local originalSpeed = humanoid.WalkSpeed
-
-    -- Stop running
+    -- Stop movement
     humanoid.WalkSpeed = 0
 
-    local originalVelocity = hrp.Velocity
+    -- Calculate total extension distance
+    local distance = StudsIntoPower(studs)
 
-    repeat
+    local startTime = tick()
+    local endTime = startTime + duration
+
+    -- Loop for continuous tracking
+    while tick() < endTime and not getgenv().emergency_stop do
+        -- Recalculate behind position based on current target position and look vector
+        local lookVector = targetHRP.CFrame.LookVector
+        local behindPosition = targetHRP.CFrame.Position - (lookVector * 5)
+
+        -- Calculate direction towards behind position
+        local direction = (behindPosition - hrp.Position).unit
+        local moveSpeed = distance / duration
+
+        -- Set velocity towards behind position
+        hrp.Velocity = direction * moveSpeed
+
         RunService.Heartbeat:Wait()
+    end
 
-        -- Check for emergency stop
-        if getgenv().emergency_stop then
-            break
-        end
-
-        -- Calculate new velocity
-        local lookVector = hrp.CFrame.LookVector
-        local newVelocity = originalVelocity + (lookVector * distance)
-        hrp.Velocity = newVelocity
-
-        RunService.RenderStepped:Wait()
-    until tick() - startTime > duration or getgenv().emergency_stop
-
-    -- Reset velocity
-    hrp.Velocity = originalVelocity
+    -- Stop movement
+    hrp.Velocity = Vector3.new(0, 0, 0)
 
     -- Restore WalkSpeed
     humanoid.WalkSpeed = originalSpeed
-
-    -- Reset emergency stop flag if needed
-    if getgenv().emergency_stop then
-        getgenv().emergency_stop = false
-    end
 end
 
--- Stop extension
-function lolz:StopExtendingHitbox()
-    getgenv().emergency_stop = true
-end
-
--- Bind Q key to trigger the hitbox extension
+-- Usage: bind to key
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
     if input.KeyCode == Enum.KeyCode.Q then
-        -- Trigger extension with desired studs and duration
-        lolz:ExtendHitbox(11.23, 0.56)
+        lolz:ExtendBehindTargetLocked(11.23, 0.56)
     end
 end)
-
-return lolz
