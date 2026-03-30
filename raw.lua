@@ -5,17 +5,48 @@ local TweenService = game:GetService("TweenService")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
+-- Create UI for adjustable distance
+local function createUI()
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "DistanceControlUI"
+    screenGui.Parent = game:GetService("StarterGui")
+
+    local sliderLabel = Instance.new("TextLabel")
+    sliderLabel.Size = UDim2.new(0, 200, 0, 50)
+    sliderLabel.Position = UDim2.new(0, 10, 0, 10)
+    sliderLabel.Text = "Distance: 11.23"
+    sliderLabel.TextColor3 = Color3.new(1, 1, 1)
+    sliderLabel.BackgroundColor3 = Color3.new(0, 0, 0)
+    sliderLabel.Parent = screenGui
+
+    local distanceSlider = Instance.new("Slider")
+    distanceSlider.Size = UDim2.new(0, 200, 0, 20)
+    distanceSlider.Position = UDim2.new(0, 10, 0, 70)
+    distanceSlider.Min = 1
+    distanceSlider.Max = 14
+    distanceSlider.Value = 11.23
+    distanceSlider.Parent = screenGui
+
+    -- Update label as slider moves
+    distanceSlider:GetPropertyChangedSignal("Value"):Connect(function()
+        sliderLabel.Text = ("Distance: %.2f"):format(distanceSlider.Value)
+    end)
+
+    return distanceSlider
+end
+
+local distanceSlider = createUI()
+
 -- Configurable parameters
-local MAX_LOCK_DISTANCE = 14 -- maximum distance to lock
+local MAX_LOCK_DISTANCE = 50 -- maximum distance to lock
 local MOVE_DURATION = 0.5 -- seconds to lerp to position
-local STUDS = 10.23 -- extension distance
 
 -- Helper: convert studs to power
 local function StudsIntoPower(studs)
     return studs * 6
 end
 
--- Get closest target within range
+-- Get the closest target within range
 function lolz:GetClosestTarget()
     local closestPlayer = nil
     local shortestDistance = math.huge
@@ -32,16 +63,25 @@ function lolz:GetClosestTarget()
             end
         end
     end
-    if closestPlayer then
-        print("Locked onto:", closestPlayer.Name)
-    else
-        print("No target in range.")
-    end
+    print("Locked onto:", closestPlayer and closestPlayer.Name or "None")
     return closestPlayer
 end
 
--- Move smoothly to target behind position with animation
-function lolz:MoveToBehindTarget(targetPlayer, studs, duration)
+-- Make your character look at the back of the target
+local function lookAtBackOfTarget(targetHRP)
+    local myHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if myHRP and targetHRP then
+        local lookVector = targetHRP.CFrame.LookVector
+        -- set your character's look rotation to face the back
+        local targetPosition = targetHRP.CFrame.Position - (lookVector * 2) -- look slightly behind target
+        local direction = (targetPosition - myHRP.Position).unit
+        local newCF = CFrame.new(myHRP.Position, myHRP.Position + direction)
+        myHRP.CFrame = newCF
+    end
+end
+
+-- Move smoothly to behind target with animation and look
+function lolz:MoveToBehindTarget(targetPlayer, distance, duration)
     if not targetPlayer or not targetPlayer.Character or not targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
         print("Invalid target.")
         return
@@ -62,12 +102,17 @@ function lolz:MoveToBehindTarget(targetPlayer, studs, duration)
     local lookVector = targetHRP.CFrame.LookVector
     local behindPosition = targetHRP.CFrame.Position - (lookVector * 5)
 
+    -- Make character face the back of the target
+    local targetPos = targetHRP.CFrame.Position
+    local backPosition = targetPos - (lookVector * 5)
+    local lookDir = (backPosition - hrp.Position).unit
+    hrp.CFrame = CFrame.new(hrp.Position, hrp.Position + lookDir)
+
     -- Tween to behind position
     local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Linear)
     local tween = TweenService:Create(hrp, tweenInfo, {Position = behindPosition})
     tween:Play()
 
-    -- Wait for tween to complete
     tween.Completed:Wait()
 
     -- Stop walking animation
@@ -75,26 +120,28 @@ function lolz:MoveToBehindTarget(targetPlayer, studs, duration)
     walkAnim:Destroy()
 end
 
--- Main extension function
+-- Main extension with lock and move
 function lolz:ExtendBehindTarget()
     local targetPlayer = self:GetClosestTarget()
     if not targetPlayer then return end
-    -- Lock only if within range
+
     local targetHRP = targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart")
     local myHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
     if not targetHRP or not myHRP then return end
 
     local dist = (targetHRP.Position - myHRP.Position).magnitude
-    if dist > MAX_LOCK_DISTANCE then
+    local currentMaxDistance = distanceSlider.Value
+
+    if dist > currentMaxDistance then
         print("Target too far to lock.")
         return
     end
 
-    -- Move to behind target with animation
-    self:MoveToBehindTarget(targetPlayer, STUDS, MOVE_DURATION)
+    -- Call move to behind with current slider value
+    self:MoveToBehindTarget(targetPlayer, currentMaxDistance, MOVE_DURATION)
 end
 
--- Bind Q to trigger the lock and move
+-- Keybind Q
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
     if input.KeyCode == Enum.KeyCode.Q then
@@ -102,5 +149,3 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
         lolz:ExtendBehindTarget()
     end
 end)
-
-return lolz
